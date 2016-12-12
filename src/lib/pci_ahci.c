@@ -436,6 +436,8 @@ ahci_port_stop(struct ahci_port *p)
 	int ncq;
 	int error;
 
+	fprintf(stderr, "*** STOPPING AHCI ***\n"); fflush(stderr);
+
 	ncq = 0;
 
 	TAILQ_FOREACH(aior, &p->iobhd, io_blist) {

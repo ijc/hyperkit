@@ -229,6 +229,9 @@ mevent_handle(struct kevent *kev, int numev)
 
 		/* XXX check for EV_ERROR ? */
 
+		if (mevp->me_fd == SIGCONT && mevp->me_type == EVF_SIGNAL) {
+			fprintf(stderr, "%s: calling %p for SIGCONT\n", __func__, (void *)mevp->me_func); fflush(stderr);
+		}
 		(*mevp->me_func)(mevp->me_fd, mevp->me_type, mevp->me_param);
 	}
 }

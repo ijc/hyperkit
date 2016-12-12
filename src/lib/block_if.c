@@ -217,6 +217,14 @@ block_delete(struct blockif_ctxt *bc, off_t offset, off_t len)
 	if (HYPERKIT_BLOCK_DELETE_ENABLED())
 		HYPERKIT_BLOCK_DELETE(offset, len);
 
+	static int i = 1;
+	if (i > 0) {
+		unsigned int s = 35;
+		fprintf(stderr, "%s: sleeping for %us\n", __func__, s); fflush(stderr);
+		sleep(s);
+		i--;
+	}
+
 	if (!bc->bc_candelete)
 		errno = EOPNOTSUPP;
 	else if (bc->bc_rdonly)
@@ -520,29 +528,39 @@ blockif_sigcont_handler(UNUSED int signal, UNUSED enum ev_type type,
 {
 	struct blockif_sig_elem *bse;
 
+	fprintf(stderr, "%s: enter\n", __func__); fflush(stderr);
+
 	for (;;) {
 		/*
 		 * Process the entire list even if not intended for
 		 * this thread.
 		 */
+		fprintf(stderr, "%s: processing a loop\n", __func__); fflush(stderr);
 		do {
 			bse = blockif_bse_head;
-			if (bse == NULL)
+			if (bse == NULL) {
+				fprintf(stderr, "%s: all done\n", __func__); fflush(stderr);
 				return;
+			}
 		} while (!atomic_cmpset_ptr((uintptr_t *)&blockif_bse_head,
 					    (uintptr_t)bse,
 					    (uintptr_t)bse->bse_next));
 
+		fprintf(stderr, "%s: grab bse_mtx\n", __func__); fflush(stderr);
 		pthread_mutex_lock(&bse->bse_mtx);
 		bse->bse_pending = 0;
+		fprintf(stderr, "%s: kicking bse_cond\n", __func__); fflush(stderr);
 		pthread_cond_signal(&bse->bse_cond);
 		pthread_mutex_unlock(&bse->bse_mtx);
+		fprintf(stderr, "%s: kick done\n", __func__); fflush(stderr);
 	}
 }
 
 static void
 blockif_init(void)
 {
+	fprintf(stderr, "%s: register %p for SIGCONT/%d\n", __func__,
+		(void *)blockif_sigcont_handler, SIGCONT); fflush(stderr);
 	mevent_add(SIGCONT, EVF_SIGNAL, blockif_sigcont_handler, NULL);
 	(void) signal(SIGCONT, SIG_IGN);
 }
@@ -838,6 +856,8 @@ blockif_cancel(struct blockif_ctxt *bc, struct blockif_req *breq)
 {
 	struct blockif_elem *be;
 
+	fprintf(stderr, "%s\n", __func__); fflush(stderr);
+
 	assert(bc->bc_magic == (int)BLOCKIF_SIG);
 
 	pthread_mutex_lock(&bc->bc_mtx);
@@ -892,12 +912,17 @@ blockif_cancel(struct blockif_ctxt *bc, struct blockif_req *breq)
 					    (uintptr_t)old_head,
 					    (uintptr_t)&bse));
 
+		fprintf(stderr, "%s: SIGCONT\n", __func__); fflush(stderr);
 		pthread_kill(be->be_tid, SIGCONT);
 
+		fprintf(stderr, "%s: Taking bse_mtx\n", __func__); fflush(stderr);
 		pthread_mutex_lock(&bse.bse_mtx);
-		while (bse.bse_pending)
+		while (bse.bse_pending) {
+			fprintf(stderr, "%s: Waiting for completion on bse_cnd\n", __func__); fflush(stderr);
 			pthread_cond_wait(&bse.bse_cond, &bse.bse_mtx);
+		}
 		pthread_mutex_unlock(&bse.bse_mtx);
+		fprintf(stderr, "%s: Complete\n", __func__); fflush(stderr);
 	}
 
 	pthread_mutex_unlock(&bc->bc_mtx);
